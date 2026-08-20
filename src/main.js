@@ -68,14 +68,46 @@ function drawTurtle() {
   context.save()
   context.translate(turtle.x, turtle.y)
   context.rotate(radians)
+
+  // Feet sit behind the shell so the turtle reads clearly at every angle.
+  context.fillStyle = '#75b893'
+  for (const [x, y] of [[-7, -9], [-7, 9], [6, -9], [6, 9]]) {
+    context.beginPath()
+    context.ellipse(x, y, 5, 3.5, 0, 0, Math.PI * 2)
+    context.fill()
+  }
+
   context.beginPath()
-  context.moveTo(10, 0)
-  context.lineTo(-7, -6)
-  context.lineTo(-4, 0)
-  context.lineTo(-7, 6)
-  context.closePath()
-  context.fillStyle = '#17211d'
+  context.ellipse(-1, 0, 13, 10, 0, 0, Math.PI * 2)
+  context.fillStyle = '#3f9d78'
   context.fill()
+  context.lineWidth = 1.5
+  context.strokeStyle = '#267258'
+  context.stroke()
+
+  context.beginPath()
+  context.ellipse(2, 0, 8, 6, 0, 0, Math.PI * 2)
+  context.fillStyle = '#8bc9a0'
+  context.fill()
+
+  context.beginPath()
+  context.ellipse(13, 0, 6, 5.5, 0, 0, Math.PI * 2)
+  context.fillStyle = '#75b893'
+  context.fill()
+  context.strokeStyle = '#267258'
+  context.stroke()
+
+  context.fillStyle = '#17211d'
+  context.beginPath()
+  context.arc(15, -2.2, 1.1, 0, Math.PI * 2)
+  context.arc(15, 2.2, 1.1, 0, Math.PI * 2)
+  context.fill()
+
+  context.beginPath()
+  context.arc(18, 0, 1.2, 0, Math.PI)
+  context.strokeStyle = '#267258'
+  context.lineWidth = 1
+  context.stroke()
   context.restore()
 }
 
