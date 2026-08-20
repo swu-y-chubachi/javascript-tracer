@@ -2,21 +2,13 @@ import './style.css'
 
 const starterCode = `const length = 70;
 
-turtle.forward(length);
-turtle.right(60);
-turtle.forward(length);
-turtle.right(60);
-turtle.forward(length);
-turtle.right(60);
-turtle.forward(length);
-turtle.right(60);
-turtle.forward(length);
-turtle.right(60);
-turtle.forward(length);
-turtle.right(60);`
+for (let i = 0; i < 6; i++) {
+  turtle.forward(length);
+  turtle.right(60);
+}`
 
 const app = document.querySelector('#app')
-const state = { code: starterCode, lines: [], pointer: 0, scope: {}, logs: [], running: false, turtle: null }
+const state = { code: starterCode, lines: [], pointer: 0, scope: {}, logs: [], running: false, turtle: null, activeLoop: null }
 
 app.innerHTML = `
   <header class="topbar"><div class="brand"><span class="brand-mark">✦</span><span>TRACE</span><small>JS playground</small></div><div class="top-actions"><span class="status"><i></i> Browser runtime</span><button class="icon-button" id="reset" title="Reset trace">↺</button></div></header>
@@ -116,6 +108,18 @@ function render() {
 }
 
 function escapeHtml(value) { return value.replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]) }
+function parseForLoop(startIndex) {
+  const header = state.lines[startIndex].trim().match(/^for\s*\(\s*(?:(let|const|var)\s+)?(\w+)\s*=\s*([^;]+);\s*([^;]+);\s*([^\)]+)\s*\)\s*\{?$/)
+  if (!header) return startIndex
+  let endIndex = startIndex
+  let depth = 0
+  for (; endIndex < state.lines.length; endIndex += 1) {
+    depth += (state.lines[endIndex].match(/\{/g) || []).length
+    depth -= (state.lines[endIndex].match(/\}/g) || []).length
+    if (depth === 0) break
+  }
+  return { endIndex, declaration: header[1] ? `${header[1]} ${header[2]} = ${header[3]}` : `${header[2]} = ${header[3]}`, condition: header[4], update: header[5] }
+}
 function executeLine(line) {
   const source = line.trim()
   const declaration = source.match(/^(const|let|var)\s+(\w+)\s*=\s*(.*)$/)
@@ -134,8 +138,30 @@ function executeLine(line) {
     if (assignment) state.scope[assignment[1]] = new Function('scope', `with (scope) { return ${assignment[1]} }`)(state.scope)
   } catch (error) { state.logs.push(`Error: ${error.message}`) }
 }
-function step() { if (state.pointer >= state.lines.length) return; executeLine(state.lines[state.pointer]); state.pointer += 1; render() }
-function reset() { state.pointer = 0; state.turtleState = { x: canvas.width / 2, y: canvas.height / 2, angle: -90, pen: true, color: '#e56d52', width: 3 }; state.scope = { turtle: createTurtle() }; state.logs = []; state.running = false; clearCanvas(); document.querySelector('#pause').disabled = true; render() }
+function step() {
+  if (state.pointer >= state.lines.length) return
+  const currentLine = state.lines[state.pointer].trim()
+  if (currentLine.startsWith('for ')) {
+    const loop = parseForLoop(state.pointer)
+    if (typeof loop === 'object') {
+      executeLine(loop.declaration)
+      state.activeLoop = { ...loop, bodyStart: state.pointer + 1 }
+      state.pointer += 1
+    } else {
+      executeLine(state.lines[state.pointer]); state.pointer += 1
+    }
+  } else if (state.activeLoop && state.pointer === state.activeLoop.endIndex) {
+    executeLine(state.lines[state.pointer])
+    executeLine(state.activeLoop.update)
+    const continues = new Function('scope', `with (scope) { return (${state.activeLoop.condition}) }`)(state.scope)
+    state.pointer = continues ? state.activeLoop.bodyStart : state.activeLoop.endIndex + 1
+    if (!continues) state.activeLoop = null
+  } else {
+    executeLine(state.lines[state.pointer]); state.pointer += 1
+  }
+  render()
+}
+function reset() { state.pointer = 0; state.activeLoop = null; state.turtleState = { x: canvas.width / 2, y: canvas.height / 2, angle: -90, pen: true, color: '#e56d52', width: 3 }; state.scope = { turtle: createTurtle() }; state.logs = []; state.running = false; clearCanvas(); document.querySelector('#pause').disabled = true; render() }
 async function run() { if (state.running) return; state.running = true; document.querySelector('#pause').disabled = false; while (state.running && state.pointer < state.lines.length) { step(); await new Promise(resolve => setTimeout(resolve, Number(document.querySelector('#speed').value))) } state.running = false; document.querySelector('#pause').disabled = true; render() }
 
 document.querySelector('#run').addEventListener('click', () => { reset(); run() })
