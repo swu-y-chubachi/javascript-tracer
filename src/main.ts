@@ -7,8 +7,60 @@ for (let i = 0; i < 6; i++) {
   turtle.right(60);
 }`
 
-const app = document.querySelector('#app')
-const state = { code: starterCode, lines: [], pointer: 0, scope: {}, logs: [], running: false, turtle: null, activeLoop: null, turtlePath: [] }
+interface TurtleState {
+  x: number
+  y: number
+  angle: number
+  pen: boolean
+  color: string
+  width: number
+}
+
+interface TurtlePathSegment {
+  fromX: number
+  fromY: number
+  toX: number
+  toY: number
+  color: string
+  width: number
+}
+
+interface TurtleApi {
+  forward(distance: number): void
+  backward(distance: number): void
+  right(degrees: number): void
+  left(degrees: number): void
+  goto(x: number, y: number): void
+  penUp(): void
+  penDown(): void
+  color(value: string): void
+  width(value: number): void
+  home(): void
+  clear(): void
+}
+
+interface ForLoop {
+  endIndex: number
+  declaration: string
+  condition: string
+  update: string
+  bodyStart: number
+}
+
+interface TraceState {
+  code: string
+  lines: string[]
+  pointer: number
+  scope: Record<string, unknown>
+  logs: string[]
+  running: boolean
+  turtleState: TurtleState
+  activeLoop: ForLoop | null
+  turtlePath: TurtlePathSegment[]
+}
+
+const app = document.querySelector<HTMLElement>('#app')!
+const state: TraceState = { code: starterCode, lines: [], pointer: 0, scope: {}, logs: [], running: false, turtleState: { x: 0, y: 0, angle: -90, pen: true, color: '#e56d52', width: 3 }, activeLoop: null, turtlePath: [] }
 
 app.innerHTML = `
   <header class="topbar"><div class="brand"><span class="brand-mark">✦</span><span>TRACE</span><small>JS playground</small></div><div class="top-actions"><span class="status"><i></i> Browser runtime</span><button class="icon-button" id="reset" title="Reset trace">↺</button></div></header>
@@ -20,13 +72,20 @@ app.innerHTML = `
     </div>
   </main><footer><span>TRACE / 01</span><span>Everything runs locally in your browser</span></footer>`
 
-const editor = document.querySelector('#editor')
-const gutter = document.querySelector('#gutter')
-const canvas = document.querySelector('#turtle-canvas')
-const context = canvas.getContext('2d')
+const editor = document.querySelector<HTMLTextAreaElement>('#editor')!
+const gutter = document.querySelector<HTMLElement>('#gutter')!
+const canvas = document.querySelector<HTMLCanvasElement>('#turtle-canvas')!
+const context = canvas.getContext('2d')!
+const stepCount = document.querySelector<HTMLElement>('#step-count')!
+const traceStatus = document.querySelector<HTMLElement>('#trace-status')!
+const traceList = document.querySelector<HTMLElement>('#trace-list')!
+const variables = document.querySelector<HTMLElement>('#variables')!
+const consoleOutput = document.querySelector<HTMLElement>('#console-output')!
+const pauseButton = document.querySelector<HTMLButtonElement>('#pause')!
+const speed = document.querySelector<HTMLSelectElement>('#speed')!
 editor.value = state.code
 
-function createTurtle() {
+function createTurtle(): TurtleApi {
   const turtle = state.turtleState
   context.lineCap = 'round'
   context.lineJoin = 'round'
@@ -44,12 +103,12 @@ function createTurtle() {
     clear() { clearCanvas() },
   }
 
-  function move(distance) {
+  function move(distance: number): void {
     const radians = turtle.angle * Math.PI / 180
     moveTo(turtle.x + Math.cos(radians) * distance, turtle.y + Math.sin(radians) * distance)
   }
 
-  function moveTo(x, y) {
+  function moveTo(x: number, y: number): void {
     const nextX = Math.max(0, Math.min(canvas.width, x))
     const nextY = Math.max(0, Math.min(canvas.height, y))
     if (turtle.pen) {
@@ -61,7 +120,7 @@ function createTurtle() {
   }
 }
 
-function drawTurtle() {
+function drawTurtle(): void {
   const turtle = state.turtleState
   if (!turtle) return
   const radians = turtle.angle * Math.PI / 180
@@ -111,12 +170,12 @@ function drawTurtle() {
   context.restore()
 }
 
-function clearCanvas() {
+function clearCanvas(): void {
   state.turtlePath = []
   redrawCanvas()
 }
 
-function redrawCanvas() {
+function redrawCanvas(): void {
   context.clearRect(0, 0, canvas.width, canvas.height)
   context.fillStyle = '#fbfaf7'
   context.fillRect(0, 0, canvas.width, canvas.height)
@@ -137,19 +196,19 @@ function redrawCanvas() {
   drawTurtle()
 }
 
-function render() {
+function render(): void {
   state.lines = editor.value.split('\n')
   gutter.innerHTML = state.lines.map((_, i) => `<span class="${i === state.pointer ? 'current' : ''} ${i < state.pointer ? 'done' : ''}">${String(i + 1).padStart(2, '0')}</span>`).join('')
-  document.querySelector('#step-count').textContent = `step ${Math.min(state.pointer, state.lines.length)} / ${state.lines.length}`
-  document.querySelector('#trace-status').textContent = state.pointer >= state.lines.length ? 'Execution complete' : state.pointer ? 'Paused at current line' : 'Ready to trace'
-  document.querySelector('#trace-list').innerHTML = state.lines.map((line, i) => `<div class="trace-row ${i === state.pointer ? 'active' : ''} ${i < state.pointer ? 'visited' : ''}"><span>${String(i + 1).padStart(2, '0')}</span><code>${escapeHtml(line) || '&nbsp;'}</code>${i === state.pointer ? '<b>●</b>' : ''}</div>`).join('')
-  document.querySelector('#variables').innerHTML = Object.keys(state.scope).length ? Object.entries(state.scope).map(([key, value]) => `<div class="variable"><span>${key}</span><code>${escapeHtml(String(value))}</code></div>`).join('') : '<div class="empty">No values yet</div>'
-  document.querySelector('#console-output').innerHTML = state.logs.length ? state.logs.map(log => `<div><span>›</span>${escapeHtml(log)}</div>`).join('') : '<div class="empty">Console output will appear here</div>'
+  stepCount.textContent = `step ${Math.min(state.pointer, state.lines.length)} / ${state.lines.length}`
+  traceStatus.textContent = state.pointer >= state.lines.length ? 'Execution complete' : state.pointer ? 'Paused at current line' : 'Ready to trace'
+  traceList.innerHTML = state.lines.map((line, i) => `<div class="trace-row ${i === state.pointer ? 'active' : ''} ${i < state.pointer ? 'visited' : ''}"><span>${String(i + 1).padStart(2, '0')}</span><code>${escapeHtml(line) || '&nbsp;'}</code>${i === state.pointer ? '<b>●</b>' : ''}</div>`).join('')
+  variables.innerHTML = Object.keys(state.scope).length ? Object.entries(state.scope).map(([key, value]) => `<div class="variable"><span>${key}</span><code>${escapeHtml(String(value))}</code></div>`).join('') : '<div class="empty">No values yet</div>'
+  consoleOutput.innerHTML = state.logs.length ? state.logs.map(log => `<div><span>›</span>${escapeHtml(log)}</div>`).join('') : '<div class="empty">Console output will appear here</div>'
   redrawCanvas()
 }
 
-function escapeHtml(value) { return value.replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]) }
-function parseForLoop(startIndex) {
+function escapeHtml(value: string): string { return value.replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char] ?? char) }
+function parseForLoop(startIndex: number): number | Omit<ForLoop, 'bodyStart'> {
   const header = state.lines[startIndex].trim().match(/^for\s*\(\s*(?:(let|const|var)\s+)?(\w+)\s*=\s*([^;]+);\s*([^;]+);\s*([^\)]+)\s*\)\s*\{?$/)
   if (!header) return startIndex
   let endIndex = startIndex
@@ -161,7 +220,7 @@ function parseForLoop(startIndex) {
   }
   return { endIndex, declaration: header[1] ? `${header[1]} ${header[2]} = ${header[3]}` : `${header[2]} = ${header[3]}`, condition: header[4], update: header[5] }
 }
-function executeLine(line) {
+function executeLine(line: string): void {
   const source = line.trim()
   const declaration = source.match(/^(const|let|var)\s+(\w+)\s*=\s*(.*)$/)
   const cleaned = declaration ? `${declaration[2]} = ${declaration[3]}` : source.replace(/^(const|let|var)\s+/, '')
@@ -177,9 +236,9 @@ function executeLine(line) {
     new Function('scope', `with (scope) { ${expression} }`)(state.scope)
     const assignment = expression.match(/^(\w+)\s*(?:\+?=|=)/)
     if (assignment) state.scope[assignment[1]] = new Function('scope', `with (scope) { return ${assignment[1]} }`)(state.scope)
-  } catch (error) { state.logs.push(`Error: ${error.message}`) }
+  } catch (error: unknown) { state.logs.push(`Error: ${error instanceof Error ? error.message : String(error)}`) }
 }
-function step() {
+function step(): void {
   if (state.pointer >= state.lines.length) return
   const currentLine = state.lines[state.pointer].trim()
   if (currentLine.startsWith('for ')) {
@@ -202,19 +261,19 @@ function step() {
   }
   render()
 }
-function reset() { state.pointer = 0; state.activeLoop = null; state.turtleState = { x: canvas.width / 2, y: canvas.height / 2, angle: -90, pen: true, color: '#e56d52', width: 3 }; state.scope = { turtle: createTurtle() }; state.logs = []; state.running = false; clearCanvas(); document.querySelector('#pause').disabled = true; render() }
-async function run() { if (state.running) return; state.running = true; document.querySelector('#pause').disabled = false; while (state.running && state.pointer < state.lines.length) { step(); await new Promise(resolve => setTimeout(resolve, Number(document.querySelector('#speed').value))) } state.running = false; document.querySelector('#pause').disabled = true; render() }
+function reset(): void { state.pointer = 0; state.activeLoop = null; state.turtleState = { x: canvas.width / 2, y: canvas.height / 2, angle: -90, pen: true, color: '#e56d52', width: 3 }; state.scope = { turtle: createTurtle() }; state.logs = []; state.running = false; clearCanvas(); pauseButton.disabled = true; render() }
+async function run(): Promise<void> { if (state.running) return; state.running = true; pauseButton.disabled = false; while (state.running && state.pointer < state.lines.length) { step(); await new Promise(resolve => setTimeout(resolve, Number(speed.value))) } state.running = false; pauseButton.disabled = true; render() }
 
-document.querySelector('#run').addEventListener('click', () => { reset(); run() })
-document.querySelector('#step').addEventListener('click', step)
-document.querySelector('#rewind').addEventListener('click', reset)
-document.querySelector('#pause').addEventListener('click', () => { state.running = false })
-document.querySelector('#reset').addEventListener('click', reset)
-document.querySelector('#clear-console').addEventListener('click', () => { state.logs = []; render() })
-document.querySelector('#clear-canvas').addEventListener('click', () => { clearCanvas(); state.turtleState = { x: canvas.width / 2, y: canvas.height / 2, angle: -90, pen: true, color: '#e56d52', width: 3 }; redrawCanvas() })
+document.querySelector<HTMLButtonElement>('#run')!.addEventListener('click', () => { reset(); void run() })
+document.querySelector<HTMLButtonElement>('#step')!.addEventListener('click', step)
+document.querySelector<HTMLButtonElement>('#rewind')!.addEventListener('click', reset)
+pauseButton.addEventListener('click', () => { state.running = false })
+document.querySelector<HTMLButtonElement>('#reset')!.addEventListener('click', reset)
+document.querySelector<HTMLButtonElement>('#clear-console')!.addEventListener('click', () => { state.logs = []; render() })
+document.querySelector<HTMLButtonElement>('#clear-canvas')!.addEventListener('click', () => { clearCanvas(); state.turtleState = { x: canvas.width / 2, y: canvas.height / 2, angle: -90, pen: true, color: '#e56d52', width: 3 }; redrawCanvas() })
 editor.addEventListener('input', () => { if (!state.running) { state.code = editor.value; reset() } })
 editor.addEventListener('scroll', () => { gutter.scrollTop = editor.scrollTop })
-document.addEventListener('keydown', event => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); document.querySelector('#run').click() } })
+document.addEventListener('keydown', (event: KeyboardEvent) => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); document.querySelector<HTMLButtonElement>('#run')!.click() } })
 reset()
 
 /* Vite starter markup replaced by the trace workspace above. */
