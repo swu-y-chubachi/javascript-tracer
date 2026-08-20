@@ -8,7 +8,7 @@ for (let i = 0; i < 6; i++) {
 }`
 
 const app = document.querySelector('#app')
-const state = { code: starterCode, lines: [], pointer: 0, scope: {}, logs: [], running: false, turtle: null, activeLoop: null }
+const state = { code: starterCode, lines: [], pointer: 0, scope: {}, logs: [], running: false, turtle: null, activeLoop: null, turtlePath: [] }
 
 app.innerHTML = `
   <header class="topbar"><div class="brand"><span class="brand-mark">✦</span><span>TRACE</span><small>JS playground</small></div><div class="top-actions"><span class="status"><i></i> Browser runtime</span><button class="icon-button" id="reset" title="Reset trace">↺</button></div></header>
@@ -53,16 +53,11 @@ function createTurtle() {
     const nextX = Math.max(0, Math.min(canvas.width, x))
     const nextY = Math.max(0, Math.min(canvas.height, y))
     if (turtle.pen) {
-      context.beginPath()
-      context.moveTo(turtle.x, turtle.y)
-      context.lineTo(nextX, nextY)
-      context.strokeStyle = turtle.color
-      context.lineWidth = turtle.width
-      context.stroke()
+      state.turtlePath.push({ fromX: turtle.x, fromY: turtle.y, toX: nextX, toY: nextY, color: turtle.color, width: turtle.width })
     }
     turtle.x = nextX
     turtle.y = nextY
-    drawTurtle()
+    redrawCanvas()
   }
 }
 
@@ -85,6 +80,11 @@ function drawTurtle() {
 }
 
 function clearCanvas() {
+  state.turtlePath = []
+  redrawCanvas()
+}
+
+function redrawCanvas() {
   context.clearRect(0, 0, canvas.width, canvas.height)
   context.fillStyle = '#fbfaf7'
   context.fillRect(0, 0, canvas.width, canvas.height)
@@ -94,6 +94,15 @@ function clearCanvas() {
   context.moveTo(canvas.width / 2, 0); context.lineTo(canvas.width / 2, canvas.height)
   context.moveTo(0, canvas.height / 2); context.lineTo(canvas.width, canvas.height / 2)
   context.stroke()
+  for (const segment of state.turtlePath) {
+    context.beginPath()
+    context.moveTo(segment.fromX, segment.fromY)
+    context.lineTo(segment.toX, segment.toY)
+    context.strokeStyle = segment.color
+    context.lineWidth = segment.width
+    context.stroke()
+  }
+  drawTurtle()
 }
 
 function render() {
@@ -104,7 +113,7 @@ function render() {
   document.querySelector('#trace-list').innerHTML = state.lines.map((line, i) => `<div class="trace-row ${i === state.pointer ? 'active' : ''} ${i < state.pointer ? 'visited' : ''}"><span>${String(i + 1).padStart(2, '0')}</span><code>${escapeHtml(line) || '&nbsp;'}</code>${i === state.pointer ? '<b>●</b>' : ''}</div>`).join('')
   document.querySelector('#variables').innerHTML = Object.keys(state.scope).length ? Object.entries(state.scope).map(([key, value]) => `<div class="variable"><span>${key}</span><code>${escapeHtml(String(value))}</code></div>`).join('') : '<div class="empty">No values yet</div>'
   document.querySelector('#console-output').innerHTML = state.logs.length ? state.logs.map(log => `<div><span>›</span>${escapeHtml(log)}</div>`).join('') : '<div class="empty">Console output will appear here</div>'
-  drawTurtle()
+  redrawCanvas()
 }
 
 function escapeHtml(value) { return value.replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]) }
@@ -170,7 +179,7 @@ document.querySelector('#rewind').addEventListener('click', reset)
 document.querySelector('#pause').addEventListener('click', () => { state.running = false })
 document.querySelector('#reset').addEventListener('click', reset)
 document.querySelector('#clear-console').addEventListener('click', () => { state.logs = []; render() })
-document.querySelector('#clear-canvas').addEventListener('click', () => { clearCanvas(); state.turtleState = { x: canvas.width / 2, y: canvas.height / 2, angle: -90, pen: true, color: '#e56d52', width: 3 }; drawTurtle() })
+document.querySelector('#clear-canvas').addEventListener('click', () => { clearCanvas(); state.turtleState = { x: canvas.width / 2, y: canvas.height / 2, angle: -90, pen: true, color: '#e56d52', width: 3 }; redrawCanvas() })
 editor.addEventListener('input', () => { if (!state.running) { state.code = editor.value; reset() } })
 editor.addEventListener('scroll', () => { gutter.scrollTop = editor.scrollTop })
 document.addEventListener('keydown', event => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); document.querySelector('#run').click() } })
