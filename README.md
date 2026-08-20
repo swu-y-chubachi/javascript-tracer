@@ -20,3 +20,16 @@ npm run dev
 - `Ctrl + Enter` / `Cmd + Enter`: Run all
 
 コードは外部サーバーへ送信せず、ブラウザ内で評価されます。
+
+## タートルグラフィックス
+
+`turtle` オブジェクトでキャンバスに図形を描けます。描画もステップ実行の対象になるため、線が伸びる過程を確認できます。
+
+```js
+turtle.forward(70)
+turtle.right(60)
+turtle.forward(70)
+turtle.right(60)
+```
+
+利用できるメソッドは `forward`、`backward`、`right`、`left`、`goto`、`penUp`、`penDown`、`color`、`width`、`home`、`clear` です。`goto(x, y)` の原点はキャンバス中央で、上方向が正のYです。
